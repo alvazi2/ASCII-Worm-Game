@@ -26,6 +26,17 @@ Details in the spec that are easy to get wrong and are deliberate:
 - **Exit ordering** (§6.4 steps 3–4). The exit cell is tested before the border, so the gap is
   passable while every other border cell stays fatal.
 
+## Phases and input
+
+`state.phase` (`title` / `playing` / `cleared` / `dead` / `help`) gates everything: the frame loop
+ticks only while `playing`, and the renderer swaps the whole playfield for the title or help block
+in those phases. Adding a screen means adding a phase, not a flag.
+
+All key handling lives in `handleKey(key)`, which dispatches on the phase and returns whether it
+acted; the `keydown` listener only calls it and decides on `preventDefault()`. Keep it that way —
+the acceptance checks drive the keyboard through `handleKey` with no browser, and keys carrying a
+Cmd/Ctrl/Alt modifier are deliberately passed through to the browser.
+
 ## Architecture
 
 Single self-contained `index.html` — markup, CSS and JS inline. No build step, no package manager,

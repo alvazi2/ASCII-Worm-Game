@@ -54,6 +54,52 @@ const CLEARED_PAUSE_MS = 1200;
 const foodCount = (level) => 3 + 2 * level;
 const tickMs = (level) => Math.max(60, 200 - 20 * level);
 
+// Title and help screens (SPEC.md sections 6.8-6.9). Keep every line under 60 characters so a
+// centred block never reaches the border.
+const TITLE_LINES = [
+  "W O R M",
+  "",
+  "a text-mode worm game, IBM PC circa 1984",
+  "",
+  "Eat every asterisk, then escape through",
+  "the opening that appears in the wall.",
+  "",
+  "S  start          H  help",
+];
+
+// Two columns padded to a common width, so centring the block keeps the key columns aligned
+// instead of centring each row independently.
+const KEY_ROWS = [
+  ["←  turn left", "→  turn right"],
+  ["S  start", "R  restart after game over"],
+  ["H  this screen", "ESC  close this screen"],
+];
+const KEY_COL = 24;
+const KEY_WIDTH = Math.max(...KEY_ROWS.map((r) => KEY_COL + r[1].length));
+const keyLines = KEY_ROWS.map(([left, right]) =>
+  (left + " ".repeat(KEY_COL - left.length) + right).padEnd(KEY_WIDTH)
+);
+
+const HELP_LINES = [
+  "H E L P",
+  "",
+  "The worm never stops moving. The arrow keys turn it",
+  "left or right relative to the way it already heads —",
+  "they do not steer it to a fixed compass point.",
+  "",
+  "Eat every * to open a gap in the wall, then drive the",
+  "worm out through the gap to finish the level. Each",
+  "level adds more asterisks and moves faster.",
+  "",
+  "Hitting a wall or your own body ends the game.",
+  "",
+  keyLines[0],
+  keyLines[1],
+  keyLines[2],
+  "",
+  "An asterisk scores 10; finishing level N scores N x 100.",
+];
+
 const key = (x, y) => x + "," + y;
 const isBorder = (x, y) => x === LEFT || x === RIGHT || y === TOP || y === BOTTOM;
 const isInterior = (x, y) => x > LEFT && x < RIGHT && y > TOP && y < BOTTOM;
@@ -69,7 +115,8 @@ const state = {
   exit: null,
   level: 1,
   score: 0,
-  phase: "playing",
+  phase: "title",
+  resumePhase: "title",
   interval: tickMs(1),
 };
 
@@ -111,6 +158,25 @@ function restart() {
   state.level = 1;
   state.score = 0;
   startLevel();
+}
+
+function showTitle() {
+  restart();
+  state.phase = "title";
+  state.resumePhase = "title";
+}
+
+function openHelp() {
+  if (state.phase === "help") return;
+  state.resumePhase = state.phase;
+  state.phase = "help";
+}
+
+function closeHelp() {
+  if (state.phase !== "help") return;
+  state.phase = state.resumePhase;
+  accumulator = 0;                       // a long look at help must not bank up ticks
+  if (state.phase === "cleared") clearedAt = performance.now();
 }
 
 // --- rules -----------------------------------------------------------------
@@ -210,10 +276,14 @@ function writeCentered(grid, row, text) {
   }
 }
 
-function render() {
-  const grid = blankGrid();
-  drawBorder(grid);
+function writeBlock(grid, lines) {
+  const start = Math.max(1, Math.floor((BOTTOM - lines.length) / 2));
+  lines.forEach((line, i) => {
+    if (line && start + i < BOTTOM) writeCentered(grid, start + i, line);
+  });
+}
 
+function drawField(grid) {
   if (state.exit) grid[state.exit.y][state.exit.x] = " ";
 
   for (const k of state.food) {
@@ -231,8 +301,23 @@ function render() {
   } else if (state.phase === "dead") {
     writeCentered(grid, Math.floor(BOTTOM / 2), "GAME OVER — press R to restart");
   }
+}
 
-  const status = " Level " + state.level + "   Score " + state.score + "   Left " + state.food.size;
+function statusText() {
+  if (state.phase === "title") return " Press S to start    H for help";
+  if (state.phase === "help") return " Press H or ESC to return";
+  return " Level " + state.level + "   Score " + state.score + "   Left " + state.food.size;
+}
+
+function render() {
+  const grid = blankGrid();
+  drawBorder(grid);
+
+  if (state.phase === "title") writeBlock(grid, TITLE_LINES);
+  else if (state.phase === "help") writeBlock(grid, HELP_LINES);
+  else drawField(grid);
+
+  const status = statusText();
   for (let i = 0; i < status.length && i < COLS; i++) grid[STATUS_ROW][i] = status[i];
 
   screenEl.textContent = grid.map((row) => row.join("")).join("\n");
@@ -260,21 +345,48 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-window.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowLeft") {
-    e.preventDefault();
-    if (state.phase === "playing") state.pendingTurn = -1;
-  } else if (e.key === "ArrowRight") {
-    e.preventDefault();
-    if (state.phase === "playing") state.pendingTurn = 1;
-  } else if ((e.key === "r" || e.key === "R") && state.phase === "dead") {
-    restart();
-  } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-    e.preventDefault();
+// Dispatches a key name against the current phase (SPEC.md section 8). Kept separate from the
+// listener so the acceptance checks can drive the keyboard headlessly. Returns true if the key
+// was acted on.
+function handleKey(k) {
+  const lower = typeof k === "string" ? k.toLowerCase() : "";
+
+  if (lower === "h") {
+    if (state.phase === "help") closeHelp();
+    else openHelp();
+    return true;
   }
+
+  if (state.phase === "help") {
+    if (k === "Escape") { closeHelp(); return true; }
+    return false;                        // help ignores every other key
+  }
+
+  if (state.phase === "title") {
+    if (lower === "s") { restart(); return true; }
+    return false;
+  }
+
+  if (state.phase === "dead") {
+    if (lower === "r") { restart(); return true; }
+    return false;
+  }
+
+  if (state.phase === "playing") {
+    if (k === "ArrowLeft") { state.pendingTurn = -1; return true; }
+    if (k === "ArrowRight") { state.pendingTurn = 1; return true; }
+  }
+
+  return false;
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+  const handled = handleKey(e.key);
+  if (handled || e.key.indexOf("Arrow") === 0) e.preventDefault();
 });
 
-startLevel();
+showTitle();
 lastFrame = performance.now();
 requestAnimationFrame(frame);
 </script>

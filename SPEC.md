@@ -39,10 +39,12 @@ References:
 | Platform | One self-contained `index.html` | No build step, no dependencies, runs by double-clicking |
 | Presentation | Emulated 80×25 monochrome text screen | Matches the original's text-mode look |
 | Steering | Relative turning only | `←`/`→` rotate the worm relative to its heading, as in the original |
-| Scope | Core loop + level/speed curve | No lives, no high-score persistence, no title screen, no pause |
+| Scope | Core loop + level/speed curve | No lives, no high-score persistence |
+| Start | The game waits on a title screen; `S` starts play | Nothing moves until the player is ready |
+| Help | `H` opens a help screen from anywhere, and freezes play while it is up | Reference for the relative-steering controls, which are unfamiliar today |
 
-The only addition beyond that scope is a one-line `GAME OVER — press R to restart` message, without
-which a death would leave the page unrecoverable.
+The only other addition beyond the core scope is a one-line `GAME OVER — press R to restart`
+message, without which a death would leave the page unrecoverable.
 
 ## 3. Screen layout
 
@@ -88,6 +90,22 @@ With the exit open on the right wall:
 ╚════════════════════════════╝
 ```
 
+The title screen (§6.8) and help screen (§6.9) replace the playfield contents while they are up;
+the border and the status line are always drawn.
+
+```
+╔════════════════════════════╗
+║          W O R M           ║
+║                            ║
+║   Eat every asterisk,      ║
+║   then escape.             ║
+║                            ║
+║   S  start     H  help     ║
+╚════════════════════════════╝
+
+ Press S to start    H for help
+```
+
 ## 4. Geometry
 
 - Screen: 80 columns × 25 rows, coordinates `(x, y)` with the origin at the top-left.
@@ -107,9 +125,13 @@ With the exit open on the right wall:
   exit: null | {x, y},
   level: 1,
   score: 0,
-  phase: 'playing' | 'cleared' | 'dead'
+  phase: 'title' | 'playing' | 'cleared' | 'dead' | 'help',
+  resumePhase: 'title'   // the phase the help screen was opened from
 }
 ```
+
+The initial phase is `title`. Ticks run only while the phase is `playing`, so the worm does not
+move on the title screen, on the help screen, during the level-complete pause, or after death.
 
 ## 6. Rules
 
@@ -176,6 +198,32 @@ Driving the head into the exit cell completes the level. On completion:
 Death displays `GAME OVER — press R to restart` centred in the field. Pressing `R` restarts at
 level 1 with `score = 0`. No other key resumes play.
 
+### 6.8 Title screen
+
+The page opens on the title screen and nothing moves until the player starts the game. The
+playfield is drawn empty — no worm, no asterisks — with the game's name and a one-line summary of
+the objective centred in it, and the status line reads `Press S to start    H for help`.
+
+Pressing `S` begins a new game: level 1, score 0, level setup per §6.1, phase `playing`. `S` has no
+effect in any other phase. The title screen is reachable only at load; after a game over the
+restart key is `R` (§6.7).
+
+### 6.9 Help screen
+
+`H` opens the help screen from any phase. It replaces the playfield contents with a summary of the
+objective, the controls and the scoring, and sets the status line to `Press H or ESC to return`.
+
+While the help screen is up the game is frozen: no ticks run, and no key other than `H` or `Escape`
+has any effect. Pressing either returns to the phase help was opened from, stored in `resumePhase`.
+On return:
+
+- the tick accumulator is reset, so a long look at the help screen cannot bank up ticks and jump
+  the worm forward on resume;
+- if the phase being returned to is `cleared`, its display timer restarts, so the
+  `LEVEL n COMPLETE` message is still readable for its full duration.
+
+`H` pressed while the help screen is up closes it, making the key a toggle.
+
 ## 7. Level and speed tables
 
 - `foodCount(level) = 3 + 2 × level`
@@ -199,13 +247,20 @@ levels beyond that get harder only through density.
 
 ## 8. Controls
 
-| Key | Effect |
-| --- | --- |
-| `←` | Turn the worm 90° counter-clockwise |
-| `→` | Turn the worm 90° clockwise |
-| `R` | Restart at level 1 (only while dead) |
+| Key | Effect | Active in phase |
+| --- | --- | --- |
+| `←` | Turn the worm 90° counter-clockwise | `playing` |
+| `→` | Turn the worm 90° clockwise | `playing` |
+| `S` | Start a new game at level 1 | `title` |
+| `R` | Restart at level 1 | `dead` |
+| `H` | Open the help screen, or close it if it is already open | any |
+| `Escape` | Close the help screen | `help` |
 
-Arrow keys call `preventDefault()` so the page never scrolls during play.
+Arrow keys call `preventDefault()` so the page never scrolls during play, as does any key the
+current phase acts on.
+
+Key handling is a single pure-ish function taking a key name and dispatching on `state.phase`, so
+the acceptance checks can drive the keyboard without a browser.
 
 ## 9. Scoring
 
@@ -236,3 +291,8 @@ glyphs, status line) and 8 is verified by a human in a browser.
 7. **Level curve** — level 2 has 7 asterisks and runs visibly faster than level 1; from level 7
    onward the tick interval stops decreasing.
 8. **Self-contained** — the file loads and plays with no network access and no external assets.
+9. **Start on demand** — the page opens on the title screen with the worm stationary; ticks do not
+   run and no asterisks are drawn. `S` starts level 1 at score 0; arrow keys do nothing until then.
+10. **Help** — `H` opens the help screen from the title screen, from play, and after a game over;
+    `H` or `Escape` returns to exactly the phase it was opened from. No ticks run while it is up,
+    and resuming does not jump the worm forward however long it was open.

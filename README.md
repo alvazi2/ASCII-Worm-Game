@@ -15,10 +15,15 @@ open index.html
 
 No install, no build, no network. It is one self-contained HTML file.
 
+It opens on a title screen and nothing moves until you press `S`.
+
 | Key | Action |
 | --- | --- |
+| `S` | Start the game, from the title screen |
 | `←` | Turn left (90° counter-clockwise) |
 | `→` | Turn right (90° clockwise) |
+| `H` | Open the help screen — or close it again. Play is frozen while it is up |
+| `Esc` | Close the help screen |
 | `R` | Restart, after a game over |
 
 The arrows turn the worm *relative to the direction it is already travelling*, as the original did —

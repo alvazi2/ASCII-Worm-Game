@@ -161,5 +161,63 @@ check("open exit erases the wall glyph", __screen.textContent.split("\n")[11][RI
 state.phase = "dead"; render();
 check("game over message is rendered", __screen.textContent.indexOf("GAME OVER") !== -1);
 
+print("Req 9 - start on demand");
+showTitle();
+check("initial phase is the title screen", state.phase === "title", state.phase);
+render();
+var title = __screen.textContent;
+check("title screen names the game", title.indexOf("W O R M") !== -1);
+check("no asterisks drawn on the title screen", (title.match(/\*/g) || []).length === 0);
+check("no worm drawn on the title screen", title.indexOf("@") === -1);
+check("title status line prompts for S", title.split("\n")[STATUS_ROW].trim() === "Press S to start    H for help",
+      JSON.stringify(title.split("\n")[STATUS_ROW].trim()));
+var head0 = JSON.stringify(state.worm[0]);
+lastFrame = 0; frame(5000); frame(10000);
+check("no ticks run on the title screen", JSON.stringify(state.worm[0]) === head0 && state.phase === "title");
+check("arrow keys do nothing before the game starts", handleKey("ArrowLeft") === false && state.pendingTurn === 0);
+state.level = 6; state.score = 4321;
+check("S starts the game", handleKey("s") === true && state.phase === "playing");
+check("S starts at level 1, score 0", state.level === 1 && state.score === 0);
+check("S places level 1 asterisks", state.food.size === 5, state.food.size);
+lastFrame = 0; frame(0); frame(400);
+check("the worm moves once started", JSON.stringify(state.worm[0]) !== head0);
+check("S is ignored once playing", handleKey("s") === false);
+showTitle();
+check("uppercase S also starts", handleKey("S") === true && state.phase === "playing");
+
+print("Req 10 - help screen");
+showTitle();
+check("H opens help from the title screen", handleKey("h") === true && state.phase === "help");
+render();
+var help = __screen.textContent;
+check("help screen is titled", help.indexOf("H E L P") !== -1);
+check("help explains relative steering", help.indexOf("relative") !== -1);
+check("help lists the start and restart keys", help.indexOf("start") !== -1 && help.indexOf("restart") !== -1);
+check("help status line prompts for H or ESC", help.split("\n")[STATUS_ROW].trim() === "Press H or ESC to return",
+      JSON.stringify(help.split("\n")[STATUS_ROW].trim()));
+check("H toggles help closed, back to title", handleKey("h") === true && state.phase === "title");
+restart();
+setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+handleKey("h");
+check("H opens help from play", state.phase === "help" && state.resumePhase === "playing");
+var headHelp = JSON.stringify(state.worm[0]);
+lastFrame = 0; frame(1000); frame(60000); frame(120000);
+check("no ticks run while help is up", JSON.stringify(state.worm[0]) === headHelp, state.worm[0]);
+check("arrow keys ignored while help is up", handleKey("ArrowLeft") === false && state.pendingTurn === 0);
+check("Escape closes help back to play", handleKey("Escape") === true && state.phase === "playing");
+frame(120010);
+check("resuming does not bank up ticks", JSON.stringify(state.worm[0]) === headHelp, state.worm[0]);
+frame(120200);
+check("play resumes normally after help", JSON.stringify(state.worm[0]) !== headHelp);
+restart();
+setWorm([[78, 11], [77, 11], [76, 11]], 1, 0);
+state.food.add("40,5"); tick();
+check("dead before opening help", state.phase === "dead");
+handleKey("h");
+check("H opens help after a game over", state.phase === "help" && state.resumePhase === "dead");
+handleKey("h");
+check("closing help returns to the game over screen", state.phase === "dead");
+check("R still restarts from there", handleKey("r") === true && state.phase === "playing" && state.level === 1);
+
 print("");
 print(fail === 0 ? "ALL " + pass + " CHECKS PASSED" : pass + " passed, " + fail + " FAILED");
