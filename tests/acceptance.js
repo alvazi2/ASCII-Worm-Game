@@ -256,6 +256,10 @@ check("R still restarts from there", handleKey("r") === true && state.phase === 
 print("Req 11 - pause");
 restart();
 setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+// Fixed asterisks, all clear of row 11: the centred PAUSED banner overwrites that row, so
+// randomly placed food there would make the visible count vary.
+state.food.clear();
+["20,4", "30,6", "50,17", "60,19", "70,8"].forEach(function (k) { state.food.add(k); });
 check("SPACE pauses play", handleKey(" ") === true && state.phase === "paused", state.phase);
 var headPaused = JSON.stringify(state.worm[0]);
 lastFrame = 0; frame(1000); frame(60000); frame(300000);

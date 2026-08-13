@@ -32,6 +32,15 @@ case "$jsc" in
          { echo 'globalThis.print = console.log;'
            cat "$root/tests/browser-stubs.js" "$tmp/game.js" "$root/tests/acceptance.js"
          } > "$tmp/all.js"
-         "$jsc" "$tmp/all.js" ;;
-  *)     "$jsc" "$root/tests/browser-stubs.js" "$tmp/game.js" "$root/tests/acceptance.js" ;;
+         out=$("$jsc" "$tmp/all.js" 2>&1) ;;
+  *)     out=$("$jsc" "$root/tests/browser-stubs.js" "$tmp/game.js" "$root/tests/acceptance.js" 2>&1) ;;
+esac
+
+printf '%s\n' "$out"
+
+# The engine exits 0 whatever the checks report, so gate on the summary line instead — otherwise
+# `./tests/run.sh && git push` would sail past a failing run.
+case "$out" in
+  *"CHECKS PASSED") exit 0 ;;
+  *)                exit 1 ;;
 esac
