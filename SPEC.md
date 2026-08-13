@@ -42,6 +42,7 @@ References:
 | Scope | Core loop + level/speed curve | No lives, no high-score persistence |
 | Start | The game waits on a title screen; `S` starts play | Nothing moves until the player is ready |
 | Help | `H` opens a help screen from anywhere, and freezes play while it is up | Reference for the relative-steering controls, which are unfamiliar today |
+| Pause | `Space` pauses and resumes play | The worm never stops on its own, so there has to be a way to step away |
 
 The only other addition beyond the core scope is a one-line `GAME OVER — press R to restart`
 message, without which a death would leave the page unrecoverable.
@@ -160,13 +161,14 @@ the border and the status line are always drawn.
   exit: null | {x, y},
   level: 1,
   score: 0,
-  phase: 'title' | 'playing' | 'cleared' | 'dead' | 'help',
+  phase: 'title' | 'playing' | 'paused' | 'cleared' | 'dead' | 'help',
   resumePhase: 'title'   // the phase the help screen was opened from
 }
 ```
 
 The initial phase is `title`. Ticks run only while the phase is `playing`, so the worm does not
-move on the title screen, on the help screen, during the level-complete pause, or after death.
+move on the title screen, on the help screen, while paused, during the level-complete pause, or
+after death.
 
 ## 6. Rules
 
@@ -259,6 +261,19 @@ On return:
 
 `H` pressed while the help screen is up closes it, making the key a toggle.
 
+### 6.10 Pause
+
+`Space` pressed while playing pauses the game: ticks stop and `PAUSED — press SPACE to resume` is
+shown centred in the field. The playfield stays on screen, worm and asterisks included, and the
+status line keeps showing level, score and asterisks remaining.
+
+`Space` pressed while paused resumes play. As when leaving the help screen (§6.9), the tick
+accumulator is reset on resume, so time spent paused cannot bank up ticks.
+
+`Space` has no effect in any other phase, and no key other than `Space` or `H` does anything while
+paused — in particular the arrow keys are ignored, so a turn cannot be queued up while the game is
+frozen. `H` opens help from the paused state and returns to it.
+
 ## 7. Level and speed tables
 
 - `foodCount(level) = 3 + 2 × level`
@@ -287,12 +302,14 @@ levels beyond that get harder only through density.
 | `←` | Turn the worm 90° counter-clockwise | `playing` |
 | `→` | Turn the worm 90° clockwise | `playing` |
 | `S` | Start a new game at level 1 | `title` |
+| `Space` | Pause, or resume if already paused | `playing`, `paused` |
 | `R` | Restart at level 1 | `dead` |
 | `H` | Open the help screen, or close it if it is already open | any |
 | `Escape` | Close the help screen | `help` |
 
-Arrow keys call `preventDefault()` so the page never scrolls during play, as does any key the
-current phase acts on.
+The arrow keys and `Space` call `preventDefault()` unconditionally so the page never scrolls during
+play, as does any other key the current phase acts on. Keys carrying a Cmd, Ctrl or Alt modifier are
+passed through to the browser untouched.
 
 Key handling is a single pure-ish function taking a key name and dispatching on `state.phase`, so
 the acceptance checks can drive the keyboard without a browser.
@@ -331,3 +348,6 @@ glyphs, status line) and 8 is verified by a human in a browser.
 10. **Help** — `H` opens the help screen from the title screen, from play, and after a game over;
     `H` or `Escape` returns to exactly the phase it was opened from. No ticks run while it is up,
     and resuming does not jump the worm forward however long it was open.
+11. **Pause** — `Space` freezes play with the field still visible and `PAUSED` shown; `Space` again
+    resumes without banking up ticks. Arrow keys are ignored while paused, `Space` does nothing on
+    the title or game-over screens, and `H` opens help from the paused state and returns to it.

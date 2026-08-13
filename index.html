@@ -87,13 +87,14 @@ const TITLE_LINES = [
 // instead of centring each row independently.
 const KEY_ROWS = [
   ["←  turn left", "→  turn right"],
-  ["S  start", "R  restart after game over"],
-  ["H  this screen", "ESC  close this screen"],
+  ["SPACE  pause or resume", "S  start a new game"],
+  ["R  restart after game over", "H  this screen"],
+  ["ESC  close this screen", ""],
 ];
-const KEY_COL = 24;
+const KEY_COL = 28;
 const KEY_WIDTH = Math.max(...KEY_ROWS.map((r) => KEY_COL + r[1].length));
 const keyLines = KEY_ROWS.map(([left, right]) =>
-  (left + " ".repeat(KEY_COL - left.length) + right).padEnd(KEY_WIDTH)
+  (left + " ".repeat(Math.max(1, KEY_COL - left.length)) + right).padEnd(KEY_WIDTH)
 );
 
 const HELP_LINES = [
@@ -112,6 +113,7 @@ const HELP_LINES = [
   keyLines[0],
   keyLines[1],
   keyLines[2],
+  keyLines[3],
   "",
   "An asterisk scores 10; finishing level N scores N x 100.",
 ];
@@ -180,6 +182,15 @@ function showTitle() {
   restart();
   state.phase = "title";
   state.resumePhase = "title";
+}
+
+function togglePause() {
+  if (state.phase === "playing") {
+    state.phase = "paused";
+  } else if (state.phase === "paused") {
+    state.phase = "playing";
+    accumulator = 0;                     // time spent paused must not bank up ticks
+  }
 }
 
 function openHelp() {
@@ -328,6 +339,8 @@ function drawField(grid) {
     writeCentered(grid, Math.floor(BOTTOM / 2), "LEVEL " + state.level + " COMPLETE");
   } else if (state.phase === "dead") {
     writeCentered(grid, Math.floor(BOTTOM / 2), "GAME OVER — press R to restart");
+  } else if (state.phase === "paused") {
+    writeCentered(grid, Math.floor(BOTTOM / 2), "PAUSED — press SPACE to resume");
   }
 }
 
@@ -390,6 +403,11 @@ function handleKey(k) {
     return false;                        // help ignores every other key
   }
 
+  if (k === " " && (state.phase === "playing" || state.phase === "paused")) {
+    togglePause();
+    return true;
+  }
+
   if (state.phase === "title") {
     if (lower === "s") { restart(); return true; }
     return false;
@@ -411,7 +429,8 @@ function handleKey(k) {
 window.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
   const handled = handleKey(e.key);
-  if (handled || e.key.indexOf("Arrow") === 0) e.preventDefault();
+  // arrows and space scroll the page, so block them whether or not the phase acted on them
+  if (handled || e.key.indexOf("Arrow") === 0 || e.key === " ") e.preventDefault();
 });
 
 showTitle();

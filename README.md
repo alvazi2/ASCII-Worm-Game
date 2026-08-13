@@ -22,6 +22,7 @@ It opens on a title screen and nothing moves until you press `S`.
 | `S` | Start the game, from the title screen |
 | `←` | Turn left (90° counter-clockwise) |
 | `→` | Turn right (90° clockwise) |
+| `Space` | Pause, or resume when paused |
 | `H` | Open the help screen — or close it again. Play is frozen while it is up |
 | `Esc` | Close the help screen |
 | `R` | Restart, after a game over |
