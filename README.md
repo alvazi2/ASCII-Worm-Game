@@ -9,7 +9,12 @@ out through it to finish the level. Each level has more asterisks and moves fast
 
 ## Play
 
+The game lives at <https://github.com/alvazi2/ASCII-Worm-Game>. Clone it, or download
+`index.html` on its own, and open it in a browser:
+
 ```sh
+git clone https://github.com/alvazi2/ASCII-Worm-Game.git
+cd ASCII-Worm-Game
 open index.html
 ```
 
