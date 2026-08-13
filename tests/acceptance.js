@@ -161,6 +161,33 @@ check("open exit erases the wall glyph", __screen.textContent.split("\n")[11][RI
 state.phase = "dead"; render();
 check("game over message is rendered", __screen.textContent.indexOf("GAME OVER") !== -1);
 
+print("Req 1 - worm drawn as a bending line");
+restart();
+setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+state.food.clear(); render();
+var rows = __screen.textContent.split("\n");
+check("straight worm is drawn with horizontal pieces", rows[11].slice(6, 11) === "════@", rows[11].slice(6, 11));
+// east, then a left turn to north, then east again: ╔══@ over ║ over ═══╝
+setWorm([[12, 8], [11, 8], [10, 8], [10, 9], [10, 10], [9, 10], [8, 10]], 1, 0);
+render();
+rows = __screen.textContent.split("\n");
+check("head stays @", rows[8][12] === "@", rows[8][12]);
+check("horizontal run uses ═", rows[8][11] === "═" && rows[10][9] === "═", rows[8][11] + rows[10][9]);
+check("bend from west to north uses ╔", rows[8][10] === "╔", rows[8][10]);
+check("vertical run uses ║", rows[9][10] === "║", rows[9][10]);
+check("bend from north to west uses ╝", rows[10][10] === "╝", rows[10][10]);
+check("tail takes the straight piece for its axis", rows[10][8] === "═", rows[10][8]);
+setWorm([[10, 12], [10, 11], [10, 10], [9, 10], [8, 10]], 0, 1);
+render();
+rows = __screen.textContent.split("\n");
+check("bend from west to south uses ╗", rows[10][10] === "╗", rows[10][10]);
+setWorm([[10, 8], [10, 9], [10, 10], [11, 10], [12, 10]], 0, -1);
+render();
+rows = __screen.textContent.split("\n");
+check("bend from east to north uses ╚", rows[10][10] === "╚", rows[10][10]);
+var field = rows.slice(0, BOTTOM + 1).join("\n");   // status line legitimately contains "Score"
+check("no 'o' glyphs left in the playfield", field.indexOf("o") === -1);
+
 print("Req 9 - start on demand");
 showTitle();
 check("initial phase is the title screen", state.phase === "title", state.phase);

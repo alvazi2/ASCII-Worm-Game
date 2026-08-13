@@ -43,8 +43,23 @@ const BOTTOM = 22;
 const STATUS_ROW = 24;
 
 const HEAD_CH = "@";
-const BODY_CH = "o";
 const FOOD_CH = "*";
+
+// The body is drawn as a bending line in the same box-drawing set as the walls (SPEC.md 3.1).
+// Each segment's glyph comes from a bitmask of the directions it connects to.
+const DIR_N = 1, DIR_S = 2, DIR_W = 4, DIR_E = 8;
+const SEGMENT_GLYPHS = {
+  [DIR_N | DIR_S]: "║",
+  [DIR_E | DIR_W]: "═",
+  [DIR_S | DIR_E]: "╔",
+  [DIR_S | DIR_W]: "╗",
+  [DIR_N | DIR_E]: "╚",
+  [DIR_N | DIR_W]: "╝",
+  [DIR_N]: "║",   // tail pieces: only one neighbour, so take that axis' straight piece
+  [DIR_S]: "║",
+  [DIR_E]: "═",
+  [DIR_W]: "═",
+};
 
 const GROWTH_PER_FOOD = 4;
 const FOOD_POINTS = 10;
@@ -283,6 +298,22 @@ function writeBlock(grid, lines) {
   });
 }
 
+// Which way `to` lies from `from`, as a direction bit. The two are always adjacent.
+function linkBit(from, to) {
+  if (to.y < from.y) return DIR_N;
+  if (to.y > from.y) return DIR_S;
+  if (to.x < from.x) return DIR_W;
+  return DIR_E;
+}
+
+function bodyGlyph(i) {
+  const seg = state.worm[i];
+  let mask = 0;
+  if (i > 0) mask |= linkBit(seg, state.worm[i - 1]);                    // toward the head
+  if (i < state.worm.length - 1) mask |= linkBit(seg, state.worm[i + 1]); // toward the tail
+  return SEGMENT_GLYPHS[mask] || "═";
+}
+
 function drawField(grid) {
   if (state.exit) grid[state.exit.y][state.exit.x] = " ";
 
@@ -293,7 +324,7 @@ function drawField(grid) {
 
   for (let i = state.worm.length - 1; i >= 0; i--) {
     const s = state.worm[i];
-    if (isInterior(s.x, s.y)) grid[s.y][s.x] = i === 0 ? HEAD_CH : BODY_CH;
+    if (isInterior(s.x, s.y)) grid[s.y][s.x] = i === 0 ? HEAD_CH : bodyGlyph(i);
   }
 
   if (state.phase === "cleared") {

@@ -59,10 +59,41 @@ Border characters use the CP437 box-drawing set: `╔ ═ ╗ ║ ╚ ╝`.
 | Cell | Glyph |
 | --- | --- |
 | Worm head | `@` |
-| Worm body | `o` |
+| Worm body | a box-drawing piece, chosen per segment — see §3.1 |
 | Asterisk (food) | `*` |
 | Exit opening | space (the wall character is erased) |
 | Empty interior | space |
+
+### 3.1 Worm body glyphs
+
+The body is drawn as a continuous line in the same CP437 double-line set as the walls, not as a run
+of repeated characters. Each segment's glyph is chosen from the directions of the segments it
+connects to — the one ahead of it toward the head, and the one behind it toward the tail — so the
+worm bends visibly at every turn:
+
+| Connects | Glyph |
+| --- | --- |
+| north + south | `║` |
+| east + west | `═` |
+| south + east | `╔` |
+| south + west | `╗` |
+| north + east | `╚` |
+| north + west | `╝` |
+
+The tail segment has only one neighbour, so it takes the straight piece for that axis: `║` if the
+neighbour is north or south, `═` if it is east or west. The head is always `@`, so that the
+direction of travel stays readable at speed.
+
+A worm heading east, turning north (a left turn), then east again:
+
+```
+        ╔══@
+        ║
+ ═══════╝
+```
+
+Because the worm never reverses (§6.3) and dies on self-contact (§6.4), a segment can only ever
+connect two distinct directions, so no other combinations arise.
 
 Colours: background `#0b0f0a`, foreground `#33ff66`. The display is monochrome throughout, as it
 would have been on a mono monitor of the period.
@@ -72,7 +103,7 @@ Mock-up (abbreviated to 30 columns for legibility; the real field is 80):
 ```
 ╔════════════════════════════╗
 ║   *        *               ║
-║      ooooo@       *        ║
+║      ═════@       *        ║
 ║  *                         ║
 ║         *          *       ║
 ╚════════════════════════════╝
@@ -85,7 +116,7 @@ With the exit open on the right wall:
 ```
 ╔════════════════════════════╗
 ║                            ║
-║               ooooo@        
+║               ═════@        
 ║                            ║
 ╚════════════════════════════╝
 ```
