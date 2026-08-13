@@ -44,3 +44,7 @@ largely uncatalogued, which is why the title cannot be found in the usual archiv
 - `index.html` — the whole game.
 - `tests/` — headless acceptance checks for the rules in `SPEC.md` §10; run `./tests/run.sh`.
 - `CLAUDE.md` — notes for Claude Code.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
