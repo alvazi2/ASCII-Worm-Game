@@ -54,10 +54,13 @@ The display is a fixed 80×25 character grid rendered in a single monospace bloc
 - Row 23: blank.
 - Row 24: the status line.
 
-Border characters use the CP437 box-drawing set: `╔ ═ ╗ ║ ╚ ╝`.
+The wall is drawn with the CP437 full block `█` in every border cell, corners included — one solid
+glyph filling the whole cell, so the rectangle reads as a thick wall rather than a thin line. There
+are no corner pieces to special-case.
 
 | Cell | Glyph |
 | --- | --- |
+| Wall | `█` |
 | Worm head | `@` |
 | Worm body | a box-drawing piece, chosen per segment — see §3.1 |
 | Asterisk (food) | `*` |
@@ -66,8 +69,9 @@ Border characters use the CP437 box-drawing set: `╔ ═ ╗ ║ ╚ ╝`.
 
 ### 3.1 Worm body glyphs
 
-The body is drawn as a continuous line in the same CP437 double-line set as the walls, not as a run
-of repeated characters. Each segment's glyph is chosen from the directions of the segments it
+The body is drawn as a continuous line in the CP437 double-line set, not as a run of repeated
+characters. The walls being solid blocks (§3) keeps the two clearly distinct: nothing on screen
+except the worm is made of line pieces. Each segment's glyph is chosen from the directions of the segments it
 connects to — the one ahead of it toward the head, and the one behind it toward the tail — so the
 worm bends visibly at every turn:
 
@@ -101,12 +105,12 @@ would have been on a mono monitor of the period.
 Mock-up (abbreviated to 30 columns for legibility; the real field is 80):
 
 ```
-╔════════════════════════════╗
-║   *        *               ║
-║      ═════@       *        ║
-║  *                         ║
-║         *          *       ║
-╚════════════════════════════╝
+██████████████████████████████
+█   *        *               █
+█      ═════@       *        █
+█  *                         █
+█         *          *       █
+██████████████████████████████
 
  Level 1   Score 40   Left 4
 ```
@@ -114,25 +118,25 @@ Mock-up (abbreviated to 30 columns for legibility; the real field is 80):
 With the exit open on the right wall:
 
 ```
-╔════════════════════════════╗
-║                            ║
-║               ═════@        
-║                            ║
-╚════════════════════════════╝
+██████████████████████████████
+█                            █
+█              ═════@         
+█                            █
+██████████████████████████████
 ```
 
 The title screen (§6.8) and help screen (§6.9) replace the playfield contents while they are up;
 the border and the status line are always drawn.
 
 ```
-╔════════════════════════════╗
-║          W O R M           ║
-║                            ║
-║   Eat every asterisk,      ║
-║   then escape.             ║
-║                            ║
-║   S  start     H  help     ║
-╚════════════════════════════╝
+██████████████████████████████
+█          W O R M           █
+█                            █
+█   Eat every asterisk,      █
+█   then escape.             █
+█                            █
+█   S  start     H  help     █
+██████████████████████████████
 
  Press S to start    H for help
 ```

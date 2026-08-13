@@ -148,8 +148,15 @@ var out = __screen.textContent.split("\n");
 check("screen is 25 rows", out.length === ROWS, out.length);
 var widths = {}; out.forEach(function (r) { widths[[].concat(Array.from(r)).length] = true; });
 check("every row is 80 characters", Object.keys(widths).length === 1 && widths[COLS], Object.keys(widths).join(","));
-check("top-left corner glyph", out[0][0] === "╔");
-check("bottom-right corner glyph", out[BOTTOM][RIGHT] === "╝");
+check("wall is solid block, corners included", out[0][0] === "█" && out[BOTTOM][RIGHT] === "█");
+check("top wall is unbroken", out[TOP] === "█".repeat(COLS), out[TOP].slice(0, 8));
+var wallBad = 0;
+for (var y = TOP; y <= BOTTOM; y++) {
+  for (var x = LEFT; x <= RIGHT; x++) {
+    if (isBorder(x, y) && out[y][x] !== "█") wallBad++;
+  }
+}
+check("every border cell is a full block", wallBad === 0, wallBad);
 check("row 23 is blank", out[23].trim() === "", JSON.stringify(out[23]));
 check("status line reads correctly", out[STATUS_ROW].trim() === "Level 1   Score 0   Left 5", JSON.stringify(out[STATUS_ROW].trim()));
 var heads = (__screen.textContent.match(/@/g) || []).length;

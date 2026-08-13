@@ -44,6 +44,7 @@ const STATUS_ROW = 24;
 
 const HEAD_CH = "@";
 const FOOD_CH = "*";
+const WALL_CH = "█";   // CP437 full block: fills the cell, so the wall reads as thick
 
 // The body is drawn as a bending line in the same box-drawing set as the walls (SPEC.md 3.1).
 // Each segment's glyph comes from a bitmask of the directions it connects to.
@@ -269,18 +270,14 @@ function blankGrid() {
 }
 
 function drawBorder(grid) {
-  for (let x = LEFT + 1; x < RIGHT; x++) {
-    grid[TOP][x] = "═";
-    grid[BOTTOM][x] = "═";
+  for (let x = LEFT; x <= RIGHT; x++) {
+    grid[TOP][x] = WALL_CH;
+    grid[BOTTOM][x] = WALL_CH;
   }
-  for (let y = TOP + 1; y < BOTTOM; y++) {
-    grid[y][LEFT] = "║";
-    grid[y][RIGHT] = "║";
+  for (let y = TOP; y <= BOTTOM; y++) {
+    grid[y][LEFT] = WALL_CH;
+    grid[y][RIGHT] = WALL_CH;
   }
-  grid[TOP][LEFT] = "╔";
-  grid[TOP][RIGHT] = "╗";
-  grid[BOTTOM][LEFT] = "╚";
-  grid[BOTTOM][RIGHT] = "╝";
 }
 
 function writeCentered(grid, row, text) {
