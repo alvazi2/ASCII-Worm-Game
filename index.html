@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worm</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #0b0f0a;
+    color: #33ff66;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #screen {
+    margin: 0;
+    white-space: pre;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    font-size: clamp(6px, 1.9vw, 18px);
+    line-height: 1.15;
+    letter-spacing: 0;
+    text-shadow: 0 0 4px rgba(51, 255, 102, 0.45);
+  }
+</style>
+</head>
+<body>
+<pre id="screen" aria-label="Worm game screen"></pre>
+<script>
+"use strict";
+
+// Screen and playfield geometry (SPEC.md sections 3-4).
+const COLS = 80;
+const ROWS = 25;
+const LEFT = 0;
+const RIGHT = COLS - 1;   // 79
+const TOP = 0;
+const BOTTOM = 22;
+const STATUS_ROW = 24;
+
+const HEAD_CH = "@";
+const BODY_CH = "o";
+const FOOD_CH = "*";
+
+const GROWTH_PER_FOOD = 4;
+const FOOD_POINTS = 10;
+const LEVEL_BONUS = 100;
+const CLEARED_PAUSE_MS = 1200;
+
+const foodCount = (level) => 3 + 2 * level;
+const tickMs = (level) => Math.max(60, 200 - 20 * level);
+
+const key = (x, y) => x + "," + y;
+const isBorder = (x, y) => x === LEFT || x === RIGHT || y === TOP || y === BOTTOM;
+const isInterior = (x, y) => x > LEFT && x < RIGHT && y > TOP && y < BOTTOM;
+
+const screenEl = document.getElementById("screen");
+
+const state = {
+  worm: [],
+  heading: { dx: 1, dy: 0 },
+  pendingTurn: 0,
+  growth: 0,
+  food: new Set(),
+  exit: null,
+  level: 1,
+  score: 0,
+  phase: "playing",
+  interval: tickMs(1),
+};
+
+let accumulator = 0;
+let lastFrame = 0;
+let clearedAt = 0;
+
+// --- setup -----------------------------------------------------------------
+
+function placeFood(count) {
+  const occupied = new Set(state.worm.map((s) => key(s.x, s.y)));
+  state.food.clear();
+  let guard = 0;
+  while (state.food.size < count && guard++ < 100000) {
+    const x = 1 + Math.floor(Math.random() * (RIGHT - 1));
+    const y = 1 + Math.floor(Math.random() * (BOTTOM - 1));
+    const k = key(x, y);
+    if (occupied.has(k) || state.food.has(k)) continue;
+    state.food.add(k);
+  }
+}
+
+function startLevel() {
+  const y = Math.round((1 + (BOTTOM - 1)) / 2);
+  const headX = 10;
+  state.worm = [];
+  for (let i = 0; i < 5; i++) state.worm.push({ x: headX - i, y: y });
+  state.heading = { dx: 1, dy: 0 };
+  state.pendingTurn = 0;
+  state.growth = 0;
+  state.exit = null;
+  state.phase = "playing";
+  state.interval = tickMs(state.level);
+  placeFood(foodCount(state.level));
+  accumulator = 0;
+}
+
+function restart() {
+  state.level = 1;
+  state.score = 0;
+  startLevel();
+}
+
+// --- rules -----------------------------------------------------------------
+
+function applyTurn() {
+  const { dx, dy } = state.heading;
+  if (state.pendingTurn === 1) {
+    state.heading = { dx: -dy, dy: dx };          // clockwise
+  } else if (state.pendingTurn === -1) {
+    state.heading = { dx: dy, dy: -dx };          // counter-clockwise
+  }
+  state.pendingTurn = 0;
+}
+
+function openExit() {
+  const candidates = [];
+  for (let x = 1; x < RIGHT; x++) {
+    candidates.push({ x: x, y: TOP });
+    candidates.push({ x: x, y: BOTTOM });
+  }
+  for (let y = 1; y < BOTTOM; y++) {
+    candidates.push({ x: LEFT, y: y });
+    candidates.push({ x: RIGHT, y: y });
+  }
+  state.exit = candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function hitsSelf(x, y) {
+  // The tail cell is vacated on this same tick, so it only blocks while growing.
+  const limit = state.worm.length - (state.growth === 0 ? 1 : 0);
+  for (let i = 0; i < limit; i++) {
+    if (state.worm[i].x === x && state.worm[i].y === y) return true;
+  }
+  return false;
+}
+
+function tick() {
+  applyTurn();
+
+  const head = state.worm[0];
+  const nx = head.x + state.heading.dx;
+  const ny = head.y + state.heading.dy;
+
+  if (state.exit && nx === state.exit.x && ny === state.exit.y) {
+    state.score += state.level * LEVEL_BONUS;
+    state.phase = "cleared";
+    clearedAt = performance.now();
+    return;
+  }
+  if (isBorder(nx, ny) || hitsSelf(nx, ny)) {
+    state.phase = "dead";
+    return;
+  }
+
+  state.worm.unshift({ x: nx, y: ny });
+  if (state.growth > 0) state.growth--;
+  else state.worm.pop();
+
+  const k = key(nx, ny);
+  if (state.food.has(k)) {
+    state.food.delete(k);
+    state.growth += GROWTH_PER_FOOD;
+    state.score += FOOD_POINTS;
+  }
+
+  if (state.food.size === 0 && !state.exit) openExit();
+}
+
+// --- rendering -------------------------------------------------------------
+
+function blankGrid() {
+  const grid = new Array(ROWS);
+  for (let y = 0; y < ROWS; y++) grid[y] = new Array(COLS).fill(" ");
+  return grid;
+}
+
+function drawBorder(grid) {
+  for (let x = LEFT + 1; x < RIGHT; x++) {
+    grid[TOP][x] = "═";
+    grid[BOTTOM][x] = "═";
+  }
+  for (let y = TOP + 1; y < BOTTOM; y++) {
+    grid[y][LEFT] = "║";
+    grid[y][RIGHT] = "║";
+  }
+  grid[TOP][LEFT] = "╔";
+  grid[TOP][RIGHT] = "╗";
+  grid[BOTTOM][LEFT] = "╚";
+  grid[BOTTOM][RIGHT] = "╝";
+}
+
+function writeCentered(grid, row, text) {
+  const padded = " " + text + " ";
+  const start = Math.max(0, Math.floor((COLS - padded.length) / 2));
+  for (let i = 0; i < padded.length && start + i < COLS; i++) {
+    grid[row][start + i] = padded[i];
+  }
+}
+
+function render() {
+  const grid = blankGrid();
+  drawBorder(grid);
+
+  if (state.exit) grid[state.exit.y][state.exit.x] = " ";
+
+  for (const k of state.food) {
+    const [x, y] = k.split(",").map(Number);
+    grid[y][x] = FOOD_CH;
+  }
+
+  for (let i = state.worm.length - 1; i >= 0; i--) {
+    const s = state.worm[i];
+    if (isInterior(s.x, s.y)) grid[s.y][s.x] = i === 0 ? HEAD_CH : BODY_CH;
+  }
+
+  if (state.phase === "cleared") {
+    writeCentered(grid, Math.floor(BOTTOM / 2), "LEVEL " + state.level + " COMPLETE");
+  } else if (state.phase === "dead") {
+    writeCentered(grid, Math.floor(BOTTOM / 2), "GAME OVER — press R to restart");
+  }
+
+  const status = " Level " + state.level + "   Score " + state.score + "   Left " + state.food.size;
+  for (let i = 0; i < status.length && i < COLS; i++) grid[STATUS_ROW][i] = status[i];
+
+  screenEl.textContent = grid.map((row) => row.join("")).join("\n");
+}
+
+// --- loop and input --------------------------------------------------------
+
+function frame(now) {
+  const dt = Math.min(now - lastFrame, 250);   // ignore long gaps from a backgrounded tab
+  lastFrame = now;
+
+  if (state.phase === "playing") {
+    accumulator += dt;
+    while (accumulator >= state.interval) {
+      accumulator -= state.interval;
+      tick();
+      if (state.phase !== "playing") break;
+    }
+  } else if (state.phase === "cleared" && now - clearedAt >= CLEARED_PAUSE_MS) {
+    state.level++;
+    startLevel();
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (state.phase === "playing") state.pendingTurn = -1;
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    if (state.phase === "playing") state.pendingTurn = 1;
+  } else if ((e.key === "r" || e.key === "R") && state.phase === "dead") {
+    restart();
+  } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+  }
+});
+
+startLevel();
+lastFrame = performance.now();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
