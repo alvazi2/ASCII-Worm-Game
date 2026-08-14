@@ -352,6 +352,9 @@ step from level 1 to 2 is +9% speed, the step from 8 to 9 is +25%.
 | `R` | Restart at level 1 | `dead`, `won` |
 | `H` | Open the help screen, or close it if it is already open | any |
 | `Escape` | Close the help screen | `help` |
+| `+` | Jump forward one level — **test mode only** (§10) | `playing` |
+| `-` | Jump back one level — **test mode only** (§10) | `playing` |
+| `I` | Toggle invulnerability — **test mode only** (§10) | `playing` |
 
 The arrow keys and `Space` call `preventDefault()` unconditionally so the page never scrolls during
 play, as does any other key the current phase acts on. Keys carrying a Cmd, Ctrl or Alt modifier are
@@ -367,7 +370,77 @@ the acceptance checks can drive the keyboard without a browser.
 | Eating an asterisk | 10 |
 | Completing a level | level × 100 |
 
-## 10. Acceptance requirements
+## 10. Test mode
+
+The game is hard, and the upper levels are the hardest to reach — which makes them the hardest to
+look at in a browser. Test mode exists so the speed ramp, the finale and the victory screen can be
+inspected without playing eight levels first. It is a development tool, not a feature: it is
+documented here and in `CLAUDE.md`, and deliberately not in the README.
+
+### 10.1 Activation
+
+Test mode is on **if and only if** the page URL carries a `level` query parameter that parses to an
+integer in `1..10`. There is no other way to enable it.
+
+`parseTestLevel(search)` takes a query string and returns that integer, or `null`. It returns
+`null` for an absent, empty, non-numeric or out-of-range value, and a `null` result means an
+entirely ordinary game — a malformed parameter must never produce a broken one. The function takes
+the query string as an argument rather than reading `location` itself, so the acceptance checks can
+exercise it without a browser.
+
+| Query string | Result |
+| --- | --- |
+| *(none)*, `""` | `null` — normal game |
+| `?level=1` … `?level=10` | that level, test mode on |
+| `?level=0`, `?level=11` | `null` — out of range |
+| `?level=abc`, `?level=` | `null` — unparseable |
+| `?foo=1&level=3` | `3` — position in the query string does not matter |
+
+`?level=1` counts as test mode: the game starts at level 1 as usual, but with the test keys live,
+so a clean run can be stepped upward.
+
+### 10.2 State
+
+Test mode adds three fields to the state of §5:
+
+- `testMode` — set once at activation, never toggled at runtime.
+- `startAtLevel` — the level a new game begins at, `1` normally. `restart()` uses this rather than a
+  hardcoded 1, so `R` after a death returns to the level under test.
+- `invincible` — toggled by `I`.
+
+### 10.3 Keys
+
+`+`, `-` and `I` do nothing at all unless `testMode` is set — they report the key as unhandled, so
+the browser's own default is not even suppressed. A player who has not activated test mode cannot
+tell they exist.
+
+- `+` and `-` while `playing` step the level by ±1, clamped to `1..10`, then run level setup (§6.1)
+  to rebuild the board. **No level bonus is awarded** — a jump is not a completion.
+- `=` is accepted as a synonym for `+` (it is the same physical key unshifted) and `_` for `-`.
+- `I` while `playing` toggles `invincible`.
+
+### 10.4 Invulnerability
+
+While `invincible` is set, neither fatal collision of §6.4 kills, but they differ:
+
+- **Self-collision** is skipped entirely — the worm passes through its own body.
+- **A move into the wall is refused.** The worm keeps its heading but does not advance, idling
+  against the wall until it is turned. It is not allowed onto the border, which would draw the worm
+  over the wall glyphs and could carry it out of the field.
+
+The exit check still runs first, so levels can still be completed with invulnerability on.
+
+Invulnerability is sticky across `restart()`: dying should not cost it while iterating on a level.
+It is cleared only by pressing `I` again, or by reloading the page.
+
+### 10.5 Display
+
+The status line carries a marker so a screenshot can never be mistaken for a real run: `TEST` while
+test mode is on, and `TEST NODIE` while invulnerable. On the title screen it also names the level
+that will start — `Press S to start    H for help    TEST level 9` — so the parameter can be
+confirmed to have taken effect before play begins.
+
+## 11. Acceptance requirements
 
 Numbered to be checked off directly against a running build. Requirements 2–7 are covered by the
 automated checks in `tests/acceptance.js` (`./tests/run.sh`); 1 is partly covered there (grid shape,
@@ -402,3 +475,7 @@ glyphs, status line) and 8 is verified by a human in a browser.
 13. **The finale** — level 10's asterisks form the peace sign rather than random positions, only
     its first 10 asterisks grow the worm, and clearing it shows the victory screen with the final
     score instead of advancing to level 11. `R` there starts a new game at level 1, score 0.
+14. **Test mode** — without the parameter the game is untouched and `+`, `-` and `I` do nothing;
+    with a valid one the game starts at that level, `+`/`-` step and clamp, `I` makes walls refuse
+    the move and self-contact harmless, `R` returns to the level under test, and the status line
+    carries the `TEST` marker throughout.

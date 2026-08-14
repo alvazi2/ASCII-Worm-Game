@@ -61,13 +61,21 @@ open index.html      # play
 ./tests/run.sh       # acceptance checks
 ```
 
+To reach the upper levels without playing there, append `?level=N` (1–10) to the URL — see
+`SPEC.md` §10. That enables test mode: the game starts at that level, `+`/`-` step between levels
+mid-play, `I` toggles invulnerability, and the status line carries a `TEST` marker so a screenshot
+is never mistaken for a real run. Without the parameter those keys do nothing at all.
+
+Keep this out of `README.md` and out of commit messages: both are public on the repository's front
+page, and advertising a way to skip to level 10 gives away that level 10 is worth skipping to.
+
 `tests/run.sh` extracts the `<script>` block from `index.html` with `awk` and evaluates it in a
 headless engine (macOS `jsc` by default, `node` as a fallback, override with `JSC=`) alongside
 `tests/browser-stubs.js`, which stubs the handful of browser globals the game touches. Because of
 that extraction, game logic must stay inside the single `<script>` block and must not depend on
 browser APIs beyond those stubs.
 
-`tests/acceptance.js` maps to the numbered requirements in `SPEC.md` §10 and drives `tick()`,
+`tests/acceptance.js` maps to the numbered requirements in `SPEC.md` §11 and drives `tick()`,
 `render()` and the state object directly. Add a check there for any rule you add to the spec.
 Requirement 8 and the feel of the speed curve are the only things still needing a human with a
 browser.

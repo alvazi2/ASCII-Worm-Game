@@ -1,4 +1,4 @@
-// Acceptance checks against SPEC.md section 10. Run with ./tests/run.sh — it extracts the
+// Acceptance checks against SPEC.md section 11. Run with ./tests/run.sh — it extracts the
 // script block from index.html and evaluates it alongside tests/browser-stubs.js.
 //
 // These cover the rules; requirement 8 (loads with no network) and the feel of the speed
@@ -356,6 +356,99 @@ check("H opens help from the victory screen", handleKey("h") === true && state.r
 check("closing help returns to the victory screen", handleKey("h") === true && state.phase === "won");
 check("R starts a new game", handleKey("r") === true && state.phase === "playing" &&
       state.level === 1 && state.score === 0);
+
+print("Req 14 - test mode");
+// the query string parser
+[["", null], [undefined, null], ["?", null],
+ ["?level=1", 1], ["?level=7", 7], ["?level=10", 10],
+ ["?level=0", null], ["?level=11", null], ["?level=99", null],
+ ["?level=abc", null], ["?level=", null], ["?level", null], ["?level=3.5", null],
+ ["?level=-2", null], ["?foo=1&level=3", 3], ["?level=3&foo=1", 3], ["?other=5", null],
+].forEach(function (c) {
+  var got = parseTestLevel(c[0]);
+  check("parseTestLevel(" + JSON.stringify(c[0]) + ") = " + c[1], got === c[1], got);
+});
+
+// off unless activated
+state.testMode = false; state.startAtLevel = 1; state.invincible = false;
+restart();
+setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+check("test keys are inert without test mode",
+      handleKey("+") === false && handleKey("-") === false && handleKey("i") === false);
+check("no level change from an inert test key", state.level === 1);
+check("invulnerability cannot be switched on", state.invincible === false);
+render();
+check("no TEST marker in a normal game", __screen.textContent.indexOf("TEST") === -1);
+showTitle(); render();
+check("no TEST marker on a normal title screen", __screen.textContent.indexOf("TEST") === -1);
+
+// activated
+enableTestMode(parseTestLevel("?level=9"));
+check("enableTestMode sets the starting level", state.testMode === true && state.startAtLevel === 9);
+showTitle(); render();
+check("title screen names the level under test",
+      __screen.textContent.split("\n")[STATUS_ROW].trim() === "Press S to start    H for help    TEST level 9",
+      JSON.stringify(__screen.textContent.split("\n")[STATUS_ROW].trim()));
+check("S starts at the level under test", handleKey("s") === true && state.level === 9);
+check("that level's own asterisk count and interval are used",
+      state.food.size === foodCount(9) && state.interval === tickMs(9), state.food.size + "/" + state.interval);
+render();
+check("TEST marker shows during play", __screen.textContent.split("\n")[STATUS_ROW].indexOf("TEST") !== -1);
+
+// R returns to the level under test, not level 1
+setWorm([[78, 11], [77, 11], [76, 11]], 1, 0);
+state.food.add("40,5"); tick();
+check("died on level 9", state.phase === "dead");
+check("R returns to the level under test", handleKey("r") === true && state.level === 9 && state.score === 0);
+
+// + and - step and clamp
+setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+var scoreBeforeJump = state.score;
+check("+ steps up a level", handleKey("+") === true && state.level === 10);
+check("the board is rebuilt at the new level", state.food.size === foodCount(10));
+check("no bonus is awarded for a jump", state.score === scoreBeforeJump);
+check("+ clamps at the final level", handleKey("+") === true && state.level === FINAL_LEVEL);
+check("- steps back down", handleKey("-") === true && state.level === 9);
+check("= behaves like +", handleKey("=") === true && state.level === 10);
+check("_ behaves like -", handleKey("_") === true && state.level === 9);
+while (state.level > 1) handleKey("-");
+check("- clamps at level 1", handleKey("-") === true && state.level === 1, state.level);
+
+// invulnerability
+check("I toggles invulnerability on", handleKey("i") === true && state.invincible === true);
+render();
+check("NODIE marker shows while invulnerable", __screen.textContent.indexOf("TEST NODIE") !== -1);
+setWorm([[78, 11], [77, 11], [76, 11]], 1, 0);
+state.invincible = true; state.food.clear(); state.food.add("40,5");
+var headAtWall = JSON.stringify(state.worm[0]);
+tick(); tick();
+check("a wall refuses the move instead of killing",
+      state.phase === "playing" && JSON.stringify(state.worm[0]) === headAtWall, state.phase);
+check("turning away from the wall works again",
+      (function () { state.pendingTurn = -1; tick(); return state.worm[0].y === 10; })(), state.worm[0]);
+setWorm([[5, 5], [5, 6], [5, 7], [6, 7], [7, 7], [7, 6], [7, 5], [8, 5]], 0, 1);
+state.invincible = true; tick();
+check("self-contact is survivable while invulnerable", state.phase === "playing", state.phase);
+setWorm([[5, 5], [5, 6], [5, 7], [6, 7], [7, 7], [7, 6], [7, 5], [8, 5]], 0, 1);
+state.invincible = false; tick();
+check("self-contact still kills with it off", state.phase === "dead", state.phase);
+restart(); state.invincible = true;
+setWorm([[10, 11], [9, 11], [8, 11], [7, 11], [6, 11]], 1, 0);
+check("I toggles back off", handleKey("i") === true && state.invincible === false);
+// deliberately sticky: dying should not cost you god mode while iterating on a level
+state.invincible = true; restart();
+check("invulnerability survives a restart", state.invincible === true);
+
+// the finale is unaffected by arriving there through test mode
+enableTestMode(parseTestLevel("?level=10"));
+restart();
+check("level 10 under test mode still lays out the peace sign", state.food.size === PEACE_SIGN.size);
+state.food.clear(); state.exit = { x: RIGHT, y: 11 };
+setWorm([[77, 11], [76, 11], [75, 11]], 1, 0);
+tick(); tick();
+check("level 10 under test mode still wins on exit", state.phase === "won", state.phase);
+// leave the module in its default state for anything that runs after
+state.testMode = false; state.startAtLevel = 1; state.invincible = false;
 
 print("");
 print(fail === 0 ? "ALL " + pass + " CHECKS PASSED" : pass + " passed, " + fail + " FAILED");
