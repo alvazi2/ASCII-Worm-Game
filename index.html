@@ -42,6 +42,10 @@ const TOP = 0;
 const BOTTOM = 22;
 const STATUS_ROW = 24;
 
+const key = (x, y) => x + "," + y;
+const isBorder = (x, y) => x === LEFT || x === RIGHT || y === TOP || y === BOTTOM;
+const isInterior = (x, y) => x > LEFT && x < RIGHT && y > TOP && y < BOTTOM;
+
 const HEAD_CH = "@";
 const FOOD_CH = "*";
 const WALL_CH = "█";   // CP437 full block: fills the cell, so the wall reads as thick
@@ -67,8 +71,43 @@ const FOOD_POINTS = 10;
 const LEVEL_BONUS = 100;
 const CLEARED_PAUSE_MS = 1200;
 
-const foodCount = (level) => 3 + 2 * level;
-const tickMs = (level) => Math.max(60, 200 - 20 * level);
+// The game is ten levels long. Levels 1-9 ramp to the 60ms floor, landing on it exactly at 9;
+// level 10 drops back to level 1's speed and lays its asterisks out as a peace sign (SPEC.md 6.11).
+const FINAL_LEVEL = 10;
+const FINAL_LEVEL_GROWTH_LIMIT = 10;   // asterisks that still grow the worm on the last level
+
+// Peace sign: an ellipse of 17 x 8.5 cells (character cells are ~2:1, so that reads as a circle),
+// a vertical stroke down its diameter, and two strokes to the lower left and right. The diagonals
+// run 2 cells across per 1 down so they look like 45 degrees, and are 2 cells wide to match the
+// weight of the vertical. Everything is clipped to the circle.
+function peaceSignCells() {
+  const cx = 39, cy = 11, rx = 17, ry = 8.5;
+  const cells = new Set();
+  const radius = (x, y) => Math.hypot((x - cx) / rx, (y - cy) / ry);
+  const add = (x, y) => { if (isInterior(x, y)) cells.add(key(x, y)); };
+
+  for (let y = TOP + 1; y < BOTTOM; y++) {
+    for (let x = LEFT + 1; x < RIGHT; x++) {
+      if (Math.abs(radius(x, y) - 1) < 0.055) add(x, y);
+    }
+  }
+  for (let y = Math.round(cy - ry); y <= Math.round(cy + ry); y++) {
+    if (radius(cx, y) <= 1.02) add(cx, y);
+  }
+  for (let i = 1; ; i++) {
+    const y = cy + i, xl = cx - 2 * i, xr = cx + 2 * i;
+    const left = radius(xl, y) <= 1.02, right = radius(xr, y) <= 1.02;
+    if (!left && !right) break;
+    if (left) { add(xl, y); add(xl + 1, y); }
+    if (right) { add(xr, y); add(xr - 1, y); }
+  }
+  return cells;
+}
+
+const PEACE_SIGN = peaceSignCells();
+
+const foodCount = (level) => (level === FINAL_LEVEL ? PEACE_SIGN.size : 3 + 2 * level);
+const tickMs = (level) => (level === FINAL_LEVEL ? 180 : Math.max(60, 195 - 15 * level));
 
 // Title and help screens (SPEC.md sections 6.8-6.9). Keep every line under 60 characters so a
 // centred block never reaches the border.
@@ -118,10 +157,6 @@ const HELP_LINES = [
   "An asterisk scores 10; finishing level N scores N x 100.",
 ];
 
-const key = (x, y) => x + "," + y;
-const isBorder = (x, y) => x === LEFT || x === RIGHT || y === TOP || y === BOTTOM;
-const isInterior = (x, y) => x > LEFT && x < RIGHT && y > TOP && y < BOTTOM;
-
 const screenEl = document.getElementById("screen");
 
 const state = {
@@ -135,6 +170,7 @@ const state = {
   score: 0,
   phase: "title",
   resumePhase: "title",
+  eaten: 0,
   interval: tickMs(1),
 };
 
@@ -147,6 +183,13 @@ let clearedAt = 0;
 function placeFood(count) {
   const occupied = new Set(state.worm.map((s) => key(s.x, s.y)));
   state.food.clear();
+
+  // The last level is a fixed pattern rather than random placement (SPEC.md 6.11).
+  if (state.level === FINAL_LEVEL) {
+    for (const k of PEACE_SIGN) if (!occupied.has(k)) state.food.add(k);
+    return;
+  }
+
   let guard = 0;
   while (state.food.size < count && guard++ < 100000) {
     const x = 1 + Math.floor(Math.random() * (RIGHT - 1));
@@ -165,6 +208,7 @@ function startLevel() {
   state.heading = { dx: 1, dy: 0 };
   state.pendingTurn = 0;
   state.growth = 0;
+  state.eaten = 0;
   state.exit = null;
   state.phase = "playing";
   state.interval = tickMs(state.level);
@@ -249,8 +293,12 @@ function tick() {
 
   if (state.exit && nx === state.exit.x && ny === state.exit.y) {
     state.score += state.level * LEVEL_BONUS;
-    state.phase = "cleared";
-    clearedAt = performance.now();
+    if (state.level === FINAL_LEVEL) {
+      state.phase = "won";
+    } else {
+      state.phase = "cleared";
+      clearedAt = performance.now();
+    }
     return;
   }
   if (isBorder(nx, ny) || hitsSelf(nx, ny)) {
@@ -265,8 +313,13 @@ function tick() {
   const k = key(nx, ny);
   if (state.food.has(k)) {
     state.food.delete(k);
-    state.growth += GROWTH_PER_FOOD;
+    state.eaten++;
     state.score += FOOD_POINTS;
+    // On the last level only the first few asterisks grow the worm, so tracing the shape stays a
+    // lap of honour rather than a survival test (SPEC.md 6.11).
+    if (state.level !== FINAL_LEVEL || state.eaten <= FINAL_LEVEL_GROWTH_LIMIT) {
+      state.growth += GROWTH_PER_FOOD;
+    }
   }
 
   if (state.food.size === 0 && !state.exit) openExit();
@@ -344,9 +397,22 @@ function drawField(grid) {
   }
 }
 
+function victoryLines() {
+  return [
+    "Y O U   W I N",
+    "",
+    "You cleared all " + FINAL_LEVEL + " levels and got the worm out alive.",
+    "",
+    "Final score   " + state.score,
+    "",
+    "press R to play again",
+  ];
+}
+
 function statusText() {
   if (state.phase === "title") return " Press S to start    H for help";
   if (state.phase === "help") return " Press H or ESC to return";
+  if (state.phase === "won") return " Press R to play again";
   return " Level " + state.level + "   Score " + state.score + "   Left " + state.food.size;
 }
 
@@ -356,6 +422,7 @@ function render() {
 
   if (state.phase === "title") writeBlock(grid, TITLE_LINES);
   else if (state.phase === "help") writeBlock(grid, HELP_LINES);
+  else if (state.phase === "won") writeBlock(grid, victoryLines());
   else drawField(grid);
 
   const status = statusText();
@@ -413,7 +480,7 @@ function handleKey(k) {
     return false;
   }
 
-  if (state.phase === "dead") {
+  if (state.phase === "dead" || state.phase === "won") {
     if (lower === "r") { restart(); return true; }
     return false;
   }

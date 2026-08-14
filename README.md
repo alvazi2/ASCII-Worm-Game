@@ -7,6 +7,8 @@ inside it. Every asterisk you eat makes the worm longer. Hit a wall or cross you
 over. Once the last asterisk is gone, a small opening appears somewhere in the wall — drive the worm
 out through it to finish the level. Each level has more asterisks and moves faster.
 
+There are ten levels. The tenth is not what you will be expecting.
+
 ## Play
 
 **[Play it here](https://alvazi2.github.io/ASCII-Worm-Game/)**

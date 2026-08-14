@@ -40,6 +40,8 @@ References:
 | Presentation | Emulated 80×25 monochrome text screen | Matches the original's text-mode look |
 | Steering | Relative turning only | `←`/`→` rotate the worm relative to its heading, as in the original |
 | Scope | Core loop + level/speed curve | No lives, no high-score persistence |
+| Length | 10 levels, then a victory screen | A run has an ending, rather than trailing off into a worm too long to survive |
+| Finale | Level 10 drops back to level 1's speed and lays its asterisks out as a peace sign | The joke: the game builds to level 9's peak, then hands over a slow puzzle |
 | Start | The game waits on a title screen; `S` starts play | Nothing moves until the player is ready |
 | Help | `H` opens a help screen from anywhere, and freezes play while it is up | Reference for the relative-steering controls, which are unfamiliar today |
 | Pause | `Space` pauses and resumes play | The worm never stops on its own, so there has to be a way to step away |
@@ -161,14 +163,15 @@ the border and the status line are always drawn.
   exit: null | {x, y},
   level: 1,
   score: 0,
-  phase: 'title' | 'playing' | 'paused' | 'cleared' | 'dead' | 'help',
-  resumePhase: 'title'   // the phase the help screen was opened from
+  phase: 'title' | 'playing' | 'paused' | 'cleared' | 'dead' | 'won' | 'help',
+  resumePhase: 'title',  // the phase the help screen was opened from
+  eaten: 0               // asterisks eaten on the current level, for the level 10 growth cap
 }
 ```
 
 The initial phase is `title`. Ticks run only while the phase is `playing`, so the worm does not
-move on the title screen, on the help screen, while paused, during the level-complete pause, or
-after death.
+move on the title screen, on the help screen, while paused, during the level-complete pause, after
+death, or on the victory screen.
 
 ## 6. Rules
 
@@ -177,13 +180,15 @@ after death.
 At the start of every level:
 
 1. The worm is reset to 5 segments, laid horizontally at the left-centre of the field, heading east.
-2. `growth` is reset to 0, `pendingTurn` to 0, `exit` to `null`.
-3. `foodCount(level)` asterisks are placed. Each is sampled from a uniformly random interior cell
-   and rejected if it is occupied by the worm or by an already-placed asterisk, so no two asterisks
-   share a cell and none spawns underneath the worm.
+2. `growth` is reset to 0, `pendingTurn` to 0, `exit` to `null`, `eaten` to 0.
+3. Asterisks are placed:
+   - **Levels 1–9:** `foodCount(level)` of them, each sampled from a uniformly random interior cell
+     and rejected if it is occupied by the worm or by an already-placed asterisk, so no two share a
+     cell and none spawns underneath the worm.
+   - **Level 10:** the fixed peace-sign pattern of §6.11, not random placement.
 4. The tick interval is set to `tickMs(level)`.
 
-`score` carries across levels; it resets only on a restart after death.
+`score` carries across levels; it resets only on a restart after death or from the victory screen.
 
 ### 6.2 Movement
 
@@ -207,13 +212,14 @@ Each tick, in order:
 
 1. Apply and clear `pendingTurn`.
 2. Compute `next = head + heading`.
-3. If `next` equals the exit cell → `phase = 'cleared'`; stop here.
+3. If `next` equals the exit cell → the level is complete (§6.6); stop here.
 4. Else if `next` lies on the border ring → `phase = 'dead'`; stop here.
 5. Else if `next` collides with the worm's own body → `phase = 'dead'`; stop here. The tail cell is
    **excluded** from this check when `growth === 0`, because that cell is vacated on this same tick;
    moving the head into it is legal.
 6. Move: prepend `next` to `worm`; if `growth > 0` decrement it, otherwise remove the tail.
-7. If `next` held an asterisk: remove it from `food`, add 4 to `growth`, add 10 to `score`.
+7. If `next` held an asterisk: remove it from `food`, increment `eaten`, add 10 to `score`, and add
+   4 to `growth` — except on level 10, where only the first 10 asterisks grow the worm (§6.11).
 8. If `food` is now empty and `exit` is still `null`: open the exit.
 
 ### 6.5 Opening the exit
@@ -224,11 +230,12 @@ remains lethal.
 
 ### 6.6 Completing a level
 
-Driving the head into the exit cell completes the level. On completion:
+Driving the head into the exit cell completes the level. On completion, `level × 100` is added to
+the score, and then:
 
-1. Add `level × 100` to the score.
-2. Display `LEVEL n COMPLETE` centred in the field for approximately 1.2 seconds.
-3. Increment `level` and run level setup (§6.1) again.
+- **Levels 1–9:** `LEVEL n COMPLETE` is displayed centred in the field for approximately 1.2
+  seconds, after which `level` is incremented and level setup (§6.1) runs again.
+- **Level 10:** the game is won — phase `won`, and the victory screen of §6.12 is shown.
 
 ### 6.7 Death and restart
 
@@ -274,26 +281,65 @@ accumulator is reset on resume, so time spent paused cannot bank up ticks.
 paused — in particular the arrow keys are ignored, so a turn cannot be queued up while the game is
 frozen. `H` opens help from the paused state and returns to it.
 
+### 6.11 Level 10, the finale
+
+Level 10 breaks the curve deliberately, and the player is given no warning of it.
+
+**Speed.** It runs at 180 ms per cell — exactly level 1's speed — after level 9 has peaked at the
+60 ms floor.
+
+**Layout.** Its asterisks are not placed randomly. They spell out a peace sign centred in the
+field: an ellipse of radius 17 × 8.5 cells (which reads as a circle, character cells being about
+twice as tall as wide), a vertical stroke down its full diameter, and two strokes from the centre
+to the lower left and lower right. Those two run 2 cells horizontally per 1 cell vertically, so
+they read as 45° on screen, and each is drawn 2 cells wide so it has the same visual weight as the
+vertical. Every stroke is clipped to the circle. The pattern comes to roughly 140 asterisks; the
+exact count is whatever the geometry produces, and `foodCount(10)` reports it.
+
+Any pattern cell that would fall on the starting worm is dropped, though with the worm starting at
+the far left and the circle centred, none does.
+
+**Growth.** Only the first 10 asterisks eaten on level 10 grow the worm; the remaining ~130 score
+normally but add nothing. The worm therefore finishes the level at about 45 segments instead of the
+~565 that uncapped growth would produce. Level 10 is a lap of honour, not a survival test — the
+point is to trace the shape, and a worm long enough to trap itself would ruin that.
+
+### 6.12 Victory screen
+
+Clearing level 10 wins the game. The victory screen replaces the playfield with `Y O U   W I N`,
+the number of levels cleared and the final score, and the status line reads
+`Press R to play again`.
+
+`R` starts a new game at level 1 with score 0. As in every other non-playing phase, no ticks run.
+`H` opens help from here and returns to it.
+
 ## 7. Level and speed tables
 
-- `foodCount(level) = 3 + 2 × level`
-- `tickMs(level) = max(60, 200 − 20 × level)`
+The game is 10 levels long. Levels 1–9 ramp; level 10 is the finale of §6.11.
 
-| Level | Asterisks | Tick (ms) |
-| ---: | ---: | ---: |
-| 1 | 5 | 180 |
-| 2 | 7 | 160 |
-| 3 | 9 | 140 |
-| 4 | 11 | 120 |
-| 5 | 13 | 100 |
-| 6 | 15 | 80 |
-| 7 | 17 | 60 |
-| 8 | 19 | 60 |
-| 9 | 21 | 60 |
-| 10 | 23 | 60 |
+- `foodCount(level) = 3 + 2 × level` for levels 1–9; for level 10, the size of the peace-sign
+  pattern (~140).
+- `tickMs(level) = max(60, 195 − 15 × level)` for levels 1–9; for level 10, `180`.
 
-Asterisk count grows without bound; speed is floored at 60 ms per tick from level 7 onward, so
-levels beyond that get harder only through density.
+| Level | Asterisks | Tick (ms) | Grows the worm |
+| ---: | ---: | ---: | :--- |
+| 1 | 5 | 180 | every asterisk |
+| 2 | 7 | 165 | every asterisk |
+| 3 | 9 | 150 | every asterisk |
+| 4 | 11 | 135 | every asterisk |
+| 5 | 13 | 120 | every asterisk |
+| 6 | 15 | 105 | every asterisk |
+| 7 | 17 | 90 | every asterisk |
+| 8 | 19 | 75 | every asterisk |
+| 9 | 21 | **60** | every asterisk |
+| 10 | ~140 (peace sign) | **180** | first 10 only |
+
+The ramp is sized so that level 9 lands exactly on the 60 ms floor — the peak arrives at the last
+ramping level rather than partway up, and every level before it is genuinely faster than the one
+before. Level 10 then drops back to level 1's speed, which is the surprise.
+
+Because the interval falls linearly while speed is its reciprocal, the felt acceleration grows: the
+step from level 1 to 2 is +9% speed, the step from 8 to 9 is +25%.
 
 ## 8. Controls
 
@@ -303,7 +349,7 @@ levels beyond that get harder only through density.
 | `→` | Turn the worm 90° clockwise | `playing` |
 | `S` | Start a new game at level 1 | `title` |
 | `Space` | Pause, or resume if already paused | `playing`, `paused` |
-| `R` | Restart at level 1 | `dead` |
+| `R` | Restart at level 1 | `dead`, `won` |
 | `H` | Open the help screen, or close it if it is already open | any |
 | `Escape` | Close the help screen | `help` |
 
@@ -351,3 +397,8 @@ glyphs, status line) and 8 is verified by a human in a browser.
 11. **Pause** — `Space` freezes play with the field still visible and `PAUSED` shown; `Space` again
     resumes without banking up ticks. Arrow keys are ignored while paused, `Space` does nothing on
     the title or game-over screens, and `H` opens help from the paused state and returns to it.
+12. **Ten levels** — the speed ramp reaches the 60 ms floor exactly at level 9, every level 1–8 is
+    strictly faster than the one before it, and level 10 runs at 180 ms, level 1's speed.
+13. **The finale** — level 10's asterisks form the peace sign rather than random positions, only
+    its first 10 asterisks grow the worm, and clearing it shows the victory screen with the final
+    score instead of advancing to level 11. `R` there starts a new game at level 1, score 0.

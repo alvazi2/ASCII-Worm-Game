@@ -25,6 +25,11 @@ Details in the spec that are easy to get wrong and are deliberate:
   intentional, not an oversight.
 - **Exit ordering** (§6.4 steps 3–4). The exit cell is tested before the border, so the gap is
   passable while every other border cell stays fatal.
+- **Level 10 is special-cased four ways** (§6.11): it runs at 180 ms rather than continuing the
+  ramp, its asterisks are the fixed peace-sign pattern rather than random, only its first 10
+  asterisks grow the worm, and clearing it wins the game rather than advancing. `foodCount` and
+  `tickMs` both branch on `FINAL_LEVEL` — changing either formula means checking that branch. The
+  ramp is tuned so level 9 lands exactly on the 60 ms floor; a check asserts that.
 
 ## Phases and input
 

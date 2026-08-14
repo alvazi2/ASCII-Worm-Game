@@ -109,7 +109,8 @@ tick();
 check("border cell next to the gap is still fatal", state.phase === "dead", state.phase);
 
 print("Req 7 - level and speed curve");
-var expected = [[1, 5, 180], [2, 7, 160], [3, 9, 140], [4, 11, 120], [5, 13, 100], [6, 15, 80], [7, 17, 60], [8, 19, 60], [10, 23, 60], [20, 43, 60]];
+var expected = [[1, 5, 180], [2, 7, 165], [3, 9, 150], [4, 11, 135], [5, 13, 120],
+                [6, 15, 105], [7, 17, 90], [8, 19, 75], [9, 21, 60]];
 var curveOk = true, detail = "";
 expected.forEach(function (row) {
   if (foodCount(row[0]) !== row[1] || tickMs(row[0]) !== row[2]) {
@@ -122,7 +123,13 @@ restart();
 check("level 1 places 5 asterisks", state.food.size === 5, state.food.size);
 check("level 1 interval is 180ms", state.interval === 180, state.interval);
 state.level = 2; startLevel();
-check("level 2 places 7 asterisks and runs at 160ms", state.food.size === 7 && state.interval === 160);
+check("level 2 places 7 asterisks and runs at 165ms", state.food.size === 7 && state.interval === 165);
+var faster = true, detail2 = "";
+for (var L = 1; L < 9; L++) {
+  if (!(tickMs(L + 1) < tickMs(L))) { faster = false; detail2 += " L" + L + "->" + (L + 1); }
+}
+check("every level 1-9 is strictly faster than the last", faster, detail2);
+check("the ramp lands exactly on the 60ms floor at level 9", tickMs(9) === 60 && tickMs(8) > 60);
 
 print("Setup invariants");
 for (var trial = 0; trial < 200; trial++) {
@@ -290,6 +297,65 @@ state.food.add("40,5"); tick();
 check("SPACE does nothing after a game over", handleKey(" ") === false && state.phase === "dead");
 showTitle(); handleKey("h"); render();
 check("help screen lists the pause key", __screen.textContent.indexOf("SPACE") !== -1);
+
+print("Req 12/13 - the finale and the victory screen");
+check("level 10 runs at level 1's speed", tickMs(FINAL_LEVEL) === tickMs(1) && tickMs(1) === 180);
+check("level 10 has far more asterisks than level 9", foodCount(FINAL_LEVEL) > 5 * foodCount(9),
+      foodCount(FINAL_LEVEL) + " vs " + foodCount(9));
+restart(); state.level = FINAL_LEVEL; startLevel();
+check("level 10 places the peace sign, not random cells", state.food.size === PEACE_SIGN.size, state.food.size);
+var sameEveryTime = true;
+var first = Array.from(state.food).sort().join("|");
+for (var t = 0; t < 20; t++) { startLevel(); if (Array.from(state.food).sort().join("|") !== first) sameEveryTime = false; }
+check("the pattern is identical on every setup", sameEveryTime);
+// the pattern is a centred, left-right symmetric shape clear of the walls
+var xs = [], ys = [], mirrored = 0;
+state.food.forEach(function (k) {
+  var p = k.split(",").map(Number);
+  xs.push(p[0]); ys.push(p[1]);
+  if (state.food.has((78 - p[0]) + "," + p[1])) mirrored++;
+});
+check("every pattern cell is inside the field", Math.min.apply(null, xs) >= 1 && Math.max.apply(null, xs) <= 78 &&
+      Math.min.apply(null, ys) >= 1 && Math.max.apply(null, ys) <= 21);
+check("the pattern is symmetric about the centre column", mirrored === state.food.size, mirrored + "/" + state.food.size);
+check("no pattern cell sits on the starting worm", state.worm.every(function (s) { return !state.food.has(key(s.x, s.y)); }));
+
+// growth cap: eat 15 asterisks off the pattern and check only the first 10 lengthened the worm
+restart(); state.level = FINAL_LEVEL; startLevel();
+var grown = 0, len = state.worm.length;
+for (var i = 0; i < 15; i++) {
+  state.eaten = i;                       // pretend i have already been eaten
+  var before = state.growth;
+  state.food.add(key(state.worm[0].x + 1, state.worm[0].y));
+  tick();
+  if (state.growth > before) grown++;
+}
+check("only the first 10 asterisks grow the worm on level 10", grown === 10, grown);
+restart(); state.level = 9; startLevel();
+state.eaten = 12; var before9 = state.growth;
+state.food.add(key(state.worm[0].x + 1, state.worm[0].y)); tick();
+check("levels 1-9 still grow on every asterisk", state.growth > before9);
+
+// clearing level 10 wins the game
+restart(); state.level = FINAL_LEVEL; startLevel();
+state.food.clear(); state.exit = { x: RIGHT, y: 11 };
+setWorm([[77, 11], [76, 11], [75, 11]], 1, 0);
+var scoreBefore10 = state.score;
+tick(); tick();
+check("clearing level 10 wins instead of advancing", state.phase === "won" && state.level === FINAL_LEVEL, state.phase);
+check("the final level bonus is still awarded", state.score === scoreBefore10 + FINAL_LEVEL * LEVEL_BONUS);
+state.score = 4820; render();
+var won = __screen.textContent;
+check("victory screen is shown", won.indexOf("Y O U   W I N") !== -1);
+check("victory screen reports the final score", won.indexOf("4820") !== -1);
+check("victory status line prompts for R", won.split("\n")[STATUS_ROW].trim() === "Press R to play again",
+      JSON.stringify(won.split("\n")[STATUS_ROW].trim()));
+lastFrame = 0; frame(1000); frame(90000);
+check("no ticks run on the victory screen", state.phase === "won");
+check("H opens help from the victory screen", handleKey("h") === true && state.resumePhase === "won");
+check("closing help returns to the victory screen", handleKey("h") === true && state.phase === "won");
+check("R starts a new game", handleKey("r") === true && state.phase === "playing" &&
+      state.level === 1 && state.score === 0);
 
 print("");
 print(fail === 0 ? "ALL " + pass + " CHECKS PASSED" : pass + " passed, " + fail + " FAILED");
